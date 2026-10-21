@@ -3,6 +3,10 @@ package triangle;
 import java.util.HashSet;
 import java.util.Random;
 import java.util.Set;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Random;
+import java.util.Set;
 
 public final class StressTest {
 
@@ -78,7 +82,7 @@ public final class StressTest {
 
         int[][] random = generate(rnd, n, 1_000_000, 0);
 
-        int[] lx = new int[n], ly = new int[n];             // collinear, evenly spaced
+        int[] lx = new int[n], ly = new int[n];
         for (int i = 0; i < n; i++) { lx[i] = i - n / 2; ly[i] = 0; }
 
         int side = 316;                                      // 316 * 316 = 99856 grid points
