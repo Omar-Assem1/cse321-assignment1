@@ -1,57 +1,270 @@
 # CSE321 Assignment 1: Divide and Conquer
-Name / ID: ...
+**Name:** Omar Assem  **ID:** 23010610
 
 ## Problem 1: Selection algorithms
 
 ### 1.1 Implementation
-- Paste the code of Select.java (the three methods), plus a short description of each.
-- Mention: three-way partition used instead of Lomuto (reason: duplicates).
-- Mention: correctness checked with CorrectnessCheck (N checks, 0 failures).
+All three methods find the k-th smallest element (k is 1-based) and work in place.
+
+- **Randomized select (CLRS 9.2).** Pick a uniformly random pivot from the current
+  range, partition, and continue only in the part that contains rank k.
+  Expected time O(n), worst case O(n^2).
+- **Deterministic select, median of medians (CLRS 9.3).** Split the range into groups
+  of 5, sort each group with insertion sort, take each group's median, and find the
+  median of these medians recursively. Use it as the pivot, partition, and continue
+  on one side. The pivot guarantees that at least about 30% of the elements fall on
+  each side, so T(n) <= T(n/5) + T(7n/10 + 6) + O(n) = O(n) in the worst case.
+  The group medians are swapped to the front of the range, so the recursive call
+  works on that prefix without an extra array.
+- **Naive method.** `Arrays.sort`, then return element k-1. O(n log n).
+
+**Deviation from the textbook.** CLRS uses the Lomuto partition, which degrades to
+O(n^2) when many elements are equal. I use a three-way partition (less than / equal to /
+greater than the pivot), so duplicates cannot cause quadratic behavior. The recursion
+structure is unchanged.
+
+**Correctness.** `CorrectnessCheck` compares both algorithms with the sorted answer on
+20,000 random arrays of size 1 to 50 with many duplicates (every rank k tested), on
+all-equal, ascending and descending arrays, and on random arrays up to about 100,000
+elements. Result: `PASSED: 1032882 checks, 0 failures`.
+
+```java
+package selection;
+
+import java.util.Arrays;
+import java.util.SplittableRandom;
+
+public final class Select {
+
+    private static final SplittableRandom RNG = new SplittableRandom(42); // fixed seed = reproducible
+    private static final int GROUP = 5;                                   // group size for median of medians
+
+    private Select() { }
+
+    public static int randomizedSelect(int[] a, int k) {
+        checkArgs(a, k);
+        int target = k - 1;                 // 0-based index of the answer in sorted order
+        int lo = 0, hi = a.length - 1;      // invariant: lo <= target <= hi
+        while (lo < hi) {
+            // pick a uniformly random pivot value from the current range
+            int pivot = a[lo + RNG.nextInt(hi - lo + 1)];
+            int[] b = partition3(a, lo, hi, pivot);   // b[0]..b[1] = block equal to pivot
+            if (target < b[0]) {
+                hi = b[0] - 1;              // answer is among the smaller elements
+            } else if (target > b[1]) {
+                lo = b[1] + 1;              // answer is among the larger elements
+            } else {
+                return pivot;               // target falls in the "equal" block: done
+            }
+        }
+        return a[lo];                       // one element left, it must be the answer
+    }
+
+    public static int deterministicSelect(int[] a, int k) {
+        checkArgs(a, k);
+        return mmSelect(a, 0, a.length - 1, k - 1);
+    }
+
+    private static int mmSelect(int[] a, int lo, int hi, int target) {
+        while (true) {
+            if (hi - lo + 1 <= GROUP) {              // tiny range: just sort it
+                insertionSort(a, lo, hi);
+                return a[target];
+            }
+            int pivot = medianOfMedians(a, lo, hi);  // a pivot guaranteed to be "good"
+            int[] b = partition3(a, lo, hi, pivot);
+            if (target < b[0]) {
+                hi = b[0] - 1;
+            } else if (target > b[1]) {
+                lo = b[1] + 1;
+            } else {
+                return pivot;
+            }
+        }
+    }
+
+    private static int medianOfMedians(int[] a, int lo, int hi) {
+        int n = hi - lo + 1;
+        int groups = (n + GROUP - 1) / GROUP;        // the last group may have fewer than 5 elements
+        for (int g = 0; g < groups; g++) {
+            int s = lo + g * GROUP;                  // group start
+            int e = Math.min(s + GROUP - 1, hi);     // group end
+            insertionSort(a, s, e);
+            // The median is the middle of the sorted group. Move it to position lo+g.
+            // lo+g <= s, so this only touches groups that are already processed.
+            swap(a, lo + g, s + (e - s) / 2);
+        }
+        // median of the 'groups' medians stored in a[lo .. lo+groups-1]
+        return mmSelect(a, lo, lo + groups - 1, lo + (groups - 1) / 2);
+    }
+
+    public static int sortSelect(int[] a, int k) {
+        checkArgs(a, k);
+        Arrays.sort(a);                              // native dual-pivot quicksort, O(n log n)
+        return a[k - 1];
+    }
+
+    private static int[] partition3(int[] a, int lo, int hi, int pivot) {
+        int lt = lo;      // next slot for a "smaller" element
+        int i = lo;       // scanning index
+        int gt = hi;      // next slot (from the right) for a "larger" element
+        while (i <= gt) {
+            if (a[i] < pivot) {
+                swap(a, lt++, i++);
+            } else if (a[i] > pivot) {
+                swap(a, i, gt--);                    // do not advance i: the swapped-in element is unseen
+            } else {
+                i++;
+            }
+        }
+        return new int[] { lt, gt };
+    }
+
+    private static void insertionSort(int[] a, int lo, int hi) {
+        for (int i = lo + 1; i <= hi; i++) {
+            int v = a[i];
+            int j = i - 1;
+            while (j >= lo && a[j] > v) {
+                a[j + 1] = a[j];
+                j--;
+            }
+            a[j + 1] = v;
+        }
+    }
+
+    private static void swap(int[] a, int i, int j) {
+        int t = a[i];
+        a[i] = a[j];
+        a[j] = t;
+    }
+
+    private static void checkArgs(int[] a, int k) {
+        if (a == null || k < 1 || k > a.length) {
+            throw new IllegalArgumentException("need 1 <= k <= a.length");
+        }
+    }
+}
+```
 
 ### 1.2 Experimental setup
-- Machine (CPU, RAM), JDK version, JVM flags (-Xms2g -Xmx2g).
-- Random int arrays, k = median, size n = 10^3 ... 10^7.
-- Warm-up, per-method clones, System.nanoTime, runs per size (500/200/50/15/5),
-  rotated method order, averages reported.
+- Machine: 12th Gen Intel(R) Core(TM) i5-12450HX (12 threads), 11Gi RAM, Kali GNU/Linux Rolling. JDK 25.0.3-ea. JVM flags: `-Xms2g -Xmx2g`.
+- Random int arrays (full int range), k = the (lower) median, n = 10^3 to 10^7.
+- JIT warm-up: 50 rounds of all three methods on 100,000-element arrays before measuring.
+- Each method receives its own clone of the array, and cloning is outside the timed region.
+- Time is measured with `System.nanoTime()` and averaged over 500 / 200 / 50 / 15 / 5 runs
+  for n = 10^3 ... 10^7. The run order of the three methods rotates each run, and the
+  program checks that all three return the same answer.
 
 ### 1.3 Results
-- Table from results.csv (n, randomized, median-of-medians, sort in ms).
-- Plot 1: time vs n, log-log, 3 series.
-- Plot 2 (optional): time / n (ns per element) vs n, log x-axis.
+| n | randomized (ms) | median of medians (ms) | sort (ms) |
+|---|---|---|---|
+| 10^3 | 0.011 | 0.026 | 0.006 |
+| 10^4 | 0.100 | 0.265 | 0.060 |
+| 10^5 | 0.976 | 2.721 | 0.716 |
+| 10^6 | 8.798 | 26.407 | 8.115 |
+| 10^7 | 97.025 | 255.357 | 127.136 |
+
+Time per element (ns):
+
+| n | randomized | median of medians | sort |
+|---|---|---|---|
+| 10^3 | 11.0 | 26.0 | 6.0 |
+| 10^4 | 10.0 | 26.5 | 6.0 |
+| 10^5 | 9.8 | 27.2 | 7.2 |
+| 10^6 | 8.8 | 26.4 | 8.1 |
+| 10^7 | 9.7 | 25.5 | 12.7 |
+
+![Selection time vs n (log-log)](plot_time.png)
+
+![Time per element vs n](plot_per_element.png)
 
 ### 1.4 Analysis
-- Theory: randomized O(n) expected, O(n^2) worst; median of medians O(n) worst;
-  sort O(n log n).
-- Which is fastest, and by what factor at 10^7?
-- Does the measured growth match? (time x10 per size step for O(n); slightly more for n log n.)
-- Deviations from theory (see section 4 of the chat answer for ideas): large constant of
-  median of medians, optimized native sort, cache and memory effects at 10^6-10^7, JIT, GC,
-  variance of randomized, the effect of the partition scheme.
+**Growth.** Both selection algorithms are linear: their time per element stays roughly
+constant (about 9-11 ns for randomized, about 26 ns for median of medians) across four
+orders of magnitude, so each 10x increase in n gives about 10x the time. Sorting is
+superlinear: its time per element rises from about 6 ns to about 12.7 ns, as expected
+for O(n log n).
+
+**Ranking.** For n <= 10^5, sort is fastest. At 10^6, sort and randomized select are within
+about 8% of each other, so I treat them as roughly equal. At 10^7, randomized select is
+fastest (97 ms), followed by sort (127 ms, 1.31x slower) and median of medians
+(255 ms, 2.6x slower than randomized). A first benchmark run gave the same ordering,
+so the crossover is not noise.
+
+**Deviations from theory.**
+1. Theory predicts selection beats sorting by a factor of about log n, but we measure
+   only 1.31x at 10^7. Asymptotic analysis hides constants. `Arrays.sort` is a heavily
+   tuned dual-pivot quicksort with a tight inner loop, and on some JDK/CPU combinations
+   it may use vectorized code. My partition loop has unpredictable branches on random data.
+   (These are plausible explanations that I did not isolate experimentally.)
+2. Median of medians is about 2.6x slower than randomized select despite its better
+   worst case. It makes extra passes (grouping, insertion sorts, median swaps) and
+   a recursive call per level. Random inputs never trigger the worst case it protects against,
+   so its guarantee costs time without a benefit here.
+3. Sort's per-element time jumps between 10^6 and 10^7 by more than log n explains.
+   A 40 MB array no longer fits in cache, so memory effects matter. JIT compilation and
+   garbage collection also add noise, especially with only 5 runs at 10^7.
+4. The three-way partition does more work per element than a plain partition, which
+   increases the constant of both selection algorithms. I chose it for robustness
+   against duplicates.
+
+**Conclusion.** Selection is asymptotically better and wins for large inputs, but a
+well-optimized library sort is competitive up to millions of elements.
 
 ## Problem 2: Minimum perimeter triangle
 
 ### 2.1 Approach
-- Key fact: every side <= P/2, so a better triangle has all pairwise distances < d/2.
-- Sort by x, split at the median, recurse, d = min(left, right).
-- Strip |x - midX| <= d/2, sorted by y (via merge), window y_j - y_i <= d/2.
-- Base case: <= 5 points, brute force. Collinear triples need no special handling
-  (the sum of the three sides equals twice the outer distance).
+**Key fact.** In a triangle with perimeter P, every side is at most P/2, because
+a <= b + c implies 2a <= a + b + c. This also holds for collinear triples, whose
+perimeter is twice the distance between the outer points. So if the best perimeter found
+so far is d, a better triangle has all three pairwise distances below d/2.
+
+**Algorithm.**
+1. Sort the points by x (ties by y) once.
+2. `divide(lo, hi)`: if at most 5 points remain, try all triples (at most 10). Otherwise
+   split at the middle index, solve both halves recursively, and set d to the smaller
+   result.
+3. A better triangle must use points from both halves, otherwise it was already counted.
+   All its points are within d/2 of the dividing line, so only the points in the strip
+   |x - midX| <= d/2 matter.
+4. Merge the two y-sorted halves (as in merge sort), collect the strip points in y order,
+   and for each strip point i test triples (i, j, k) with j and k after i in y order and
+   y_j - y_i <= d/2, y_k - y_i <= d/2. Whenever a smaller perimeter is found, d is
+   updated, which shrinks the window.
+5. Return d. Collinear triples need no special case, because the sum of the three
+   distances already equals twice the outer distance.
 
 ### 2.2 Why only a constant number of points need checking
-- Points of one half are pairwise "sparse": any three of them have perimeter >= d.
-- Cut the window (width d/2 per side, height d/2) into cells of side d/5; three points
-  in one cell would give perimeter <= 3 * sqrt(2) * d/5 < d, so each cell holds <= 2 points.
-- At most 3x3 cells per side => <= 36 points in the window. Constant => strip work is O(m).
+The points of the left half are sparse: any three of them form a triangle with perimeter
+at least d, since d is at most the best perimeter of that half (same for the right half).
+Take a window of width d/2 on one side of the line and height d/2, and divide it into
+cells of side d/5. Three points in one cell would have pairwise distances at most
+sqrt(2) * d/5, so a perimeter of at most 3 * sqrt(2) * d/5 = 0.85d < d, a contradiction.
+So each cell holds at most 2 points. A d/2 by d/2 window needs at most 3 x 3 = 9 cells per
+side, so at most 18 points per side and 36 in total. The inner loops therefore do
+a constant amount of work per strip point.
 
 ### 2.3 Complexity
-- Initial sort O(n log n); recurrence T(n) = 2T(n/2) + O(n) => O(n log n) total.
-- Space O(n).
-- Compare with brute force O(n^3).
+- The initial sort costs O(n log n).
+- At each recursion level, the merge costs O(n), building the strip costs O(n), and the
+  strip scan costs O(m) <= O(n) because of the constant window. So
+  T(n) = 2T(n/2) + O(n), which gives O(n log n).
+- Total time O(n log n), space O(n) (temporary arrays for the merge and the strip).
+- A brute-force solution checks all triples, which is O(n^3), about 10^15 operations
+  for n = 10^5.
 
 ### 2.4 Testing
-- Samples, 5000 random cases vs brute force (collinear, ties, tiny ranges), n = 10^5 timings.
+- The four sample cases pass.
+- 5000 random cases compared with the O(n^3) brute force agree (including fully collinear
+  sets, two-line sets and tiny coordinate ranges with many ties).
+- Timings for n = 10^5: random points 28 ms, collinear points 6 ms, dense grid about 20 ms.
+- Edge cases: maximum coordinates (n = 3), Windows line endings with no trailing
+  newline, 100,000 tiny test cases, and 10^5 points on a vertical line, all correct.
+- The course's automatic checker passed all tests (about 0.2 s per performance test,
+  including JVM startup).
 
-### 2.5 Notes / deviations
-- Constant factor in the strip is larger than in the classic closest-pair algorithm
-  (triples, not pairs), but still constant.
-- EPS = 1e-9 in the strip tests protects against floating-point rounding.
+### 2.5 Notes
+- The strip check handles triples, not pairs as in the classic closest-pair problem,
+  so its constant is larger, but it is still constant.
+- A tolerance of 1e-9 in the strip comparisons protects against floating-point rounding.
+- Output uses `Locale.US` so the decimal separator is always a dot.
