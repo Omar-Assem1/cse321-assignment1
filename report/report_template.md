@@ -118,14 +118,15 @@ so far is d, a better triangle has all three pairwise distances below d/2.
    distances already equals twice the outer distance.
 
 ### 2.2 Why only a constant number of points need checking
-The points of the left half are sparse: any three of them form a triangle with perimeter
-at least d, since d is at most the best perimeter of that half (same for the right half).
-Take a window of width d/2 on one side of the line and height d/2, and divide it into
-cells of side d/5. Three points in one cell would have pairwise distances at most
-sqrt(2) * d/5, so a perimeter of at most 3 * sqrt(2) * d/5 = 0.85d < d, a contradiction.
-So each cell holds at most 2 points. A d/2 by d/2 window needs at most 3 x 3 = 9 cells per
-side, so at most 18 points per side and 36 in total. The inner loops therefore do
-a constant amount of work per strip point.
+The points of the left half are sparse: d is the smaller of the two halves' best
+perimeters, so any three points of the same half form a triangle with perimeter at
+least d (the same holds for the right half). Take a window of width d/2 on each side of
+the dividing line and height d/2, and divide it into cells of side d/4. Three points of
+one half in the same cell would form a triangle with perimeter at most
+(2 + sqrt(2)) * d/4 = 0.854d < d (the largest triangle inside a square is the right
+triangle on three of its corners), a contradiction. So each cell holds at most 2 points
+of each half. The window has 2 x 2 = 4 cells per side, so 8 cells in total and at most
+8 * 2 = 16 points. The inner loops therefore do a constant amount of work per strip point.
 
 ### 2.3 Complexity
 - The initial sort costs O(n log n).
